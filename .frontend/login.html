@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyCourse - Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+  <div class="login-container">
+    <!-- LEFT SIDE - DECORATION & WELCOME -->
+    <div class="login-left">
+      <div class="login-left-content">
+        <div class="welcome-badge">
+          <span class="badge-icon">🎓</span>
+        </div>
+        <h1 class="welcome-title">Mulai Perjalanan Belajarmu</h1>
+        <p class="welcome-subtitle">Tingkatkan skill dan pengetahuan dengan ribuan kursus berkualitas dari instruktur terbaik</p>
+
+        <div class="features">
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span class="feature-text">Sertifikat Resmi</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span class="feature-text">Belajar Kapan Saja</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span class="feature-text">Mentor Profesional</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span class="feature-text">Komunitas Aktif</span>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-number">50K+</div>
+            <div class="stat-label">Pelajar Aktif</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">200+</div>
+            <div class="stat-label">Kursus Tersedia</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">4.8⭐</div>
+            <div class="stat-label">Rating Terbaik</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDE - LOGIN FORM -->
+    <div class="login-right">
+      <div class="form-container">
+        <div class="form-header">
+          <h2>Selamat Datang</h2>
+          <p>Masuk ke akun MyCourse Anda</p>
+        </div>
+
+        <!-- Alert Messages -->
+        <div id="alert-message" class="alert" style="display: none;"></div>
+
+        <!-- Login Form -->
+        <form id="login-form">
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" placeholder="nama@example.com" required />
+            <span class="error-message" id="email-error"></span>
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="password-wrapper">
+              <input type="password" id="password" name="password" placeholder="••••••••" required />
+              <button type="button" class="toggle-password" id="toggle-password">👁</button>
+            </div>
+            <span class="error-message" id="password-error"></span>
+          </div>
+
+          <div class="form-group">
+            <label for="verification-code">Kode Verifikasi dari Admin</label>
+            <input type="text" id="verification-code" name="verification_code" placeholder="Masukkan kode verifikasi" />
+            <span class="error-message" id="verification-code-error"></span>
+          </div>
+
+          <div class="form-options">
+            <label class="remember-me">
+              <input type="checkbox" id="remember" name="remember" />
+              <span>Ingat saya</span>
+            </label>
+            <a href="#forgot" class="forgot-link">Lupa password?</a>
+          </div>
+
+          <button type="submit" class="btn-login">Masuk</button>
+        </form>
+
+        <div class="divider">atau</div>
+
+        <!-- Google Sign In -->
+        <div id="google-signin-container" class="google-signin-wrapper">
+          <div id="google-signin-btn"></div>
+        </div>
+
+        <div class="signup-link">
+          Belum punya akun? <a href="#signup">Daftar sekarang</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

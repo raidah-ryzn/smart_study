@@ -1,0 +1,488 @@
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyCourse Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="logo-badge">MC</span>
+        <span class="logo-text">MyCourse</span>
+      </div>
+
+      <nav class="menu">
+        <a href="#" class="menu-item active" data-page="dashboard">
+          <span class="menu-icon">▣</span> Dashboard
+        </a>
+        <a href="#" class="menu-item" data-page="courses">
+          <span class="menu-icon">▦</span> Courses
+        </a>
+        <a href="#" class="menu-item" data-page="assignment">
+          <span class="menu-icon">▤</span> Assignment
+        </a>
+        <a href="#" class="menu-item" data-page="events">
+          <span class="menu-icon">◷</span> Events
+        </a>
+        <a href="#" id="admin-panel-menu" class="menu-item hidden" data-page="admin-panel">
+          <span class="menu-icon">🛡</span> Admin Panel
+        </a>
+        <a href="#" class="menu-item" data-page="settings">
+          <span class="menu-icon">⚙</span> Settings
+        </a>
+        <a href="#" class="menu-item" onclick="handleLogout(); return false;" data-page="logout">
+          <span class="menu-icon">⏻</span> Logout
+        </a>
+      </nav>
+
+      <div class="promo-card">
+        <div class="promo-icon">🚀</div>
+        <p class="promo-text">3 Juta member menggunakan Paket Platinum</p>
+        <button class="btn-upgrade">Upgrade Sekarang</button>
+      </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main">
+
+      <header class="topbar">
+        <div class="search-box">
+          <span class="search-icon">⌕</span>
+          <input type="text" placeholder="Cari kursus, tugas..." />
+        </div>
+        <div class="topbar-right">
+          <div class="message-wrapper">
+            <button id="messages-btn" class="icon-btn" title="Pesan" type="button" aria-label="Pesan">
+              ✉
+              <span id="messages-badge" class="notification-badge hidden">0</span>
+            </button>
+            <div id="messages-panel" class="messages-panel hidden">
+              <div class="messages-header">
+                <h3>Pesan</h3>
+                <button id="new-chat-btn" type="button" class="new-chat-btn">+ Baru</button>
+              </div>
+              <div class="messages-content">
+                <aside class="conversation-sidebar">
+                  <div id="conversation-list" class="conversation-list"></div>
+                </aside>
+                <section class="conversation-thread">
+                  <div id="thread-header" class="thread-header">Pilih percakapan</div>
+                  <div id="thread-messages" class="thread-messages"></div>
+                  <form id="message-form" class="message-form">
+                    <input id="message-input" type="text" placeholder="Ketik pesan..." maxlength="500" />
+                    <button type="submit" class="btn-primary">Kirim</button>
+                  </form>
+                </section>
+              </div>
+            </div>
+          </div>
+          <div class="notification-wrapper">
+            <button id="notification-btn" class="icon-btn notification-btn" title="Notifikasi" type="button" aria-label="Notifikasi">
+              🔔
+              <span id="notification-badge" class="notification-badge hidden">0</span>
+            </button>
+            <div id="notification-panel" class="notification-panel hidden">
+              <div class="notification-header">
+                <h3>Notifikasi</h3>
+                <button id="mark-all-read-btn" type="button" class="notification-mark-all">Tandai semua sudah dibaca</button>
+              </div>
+              <div id="notification-list" class="notification-list"></div>
+            </div>
+          </div>
+          <div class="user-chip">
+            <span class="avatar">WJ</span>
+            <span class="user-name">William xxx </span>
+          </div>
+        </div>
+      </header>
+
+      <div id="dashboard-page" class="page-section">
+        <div class="content-grid">
+
+          <!-- LEFT COLUMN -->
+          <section class="left-col">
+
+            <div class="welcome-banner">
+              <div class="welcome-text">
+                <h1 id="welcome-title">Selamat datang kembali, xxx!</h1>
+                <p>Yuk, tingkatkan progres belajarmu ke Paket Platinum</p>
+                <button class="btn-cta">Gabung Sekarang <span>›</span></button>
+              </div>
+              <div class="welcome-icon">🏆</div>
+            </div>
+
+            <div class="category-row" id="category-row">
+              <!-- diisi oleh script.js dari data backend -->
+            </div>
+
+            <div class="section-header">
+              <h2>Kursus Terakhir Dibuka</h2>
+              <div class="nav-arrows">
+                <button class="arrow-btn">‹</button>
+                <button class="arrow-btn">›</button>
+              </div>
+            </div>
+
+            <div class="course-row" id="course-row">
+              <!-- diisi oleh script.js dari data backend -->
+            </div>
+
+          </section>
+
+          <!-- RIGHT COLUMN -->
+          <aside class="right-col">
+
+            <div class="card progress-card">
+              <div class="card-header">
+                <h2>Progres Belajar</h2>
+                <select class="filter-select">
+                  <option>Mingguan</option>
+                  <option>Bulanan</option>
+                </select>
+              </div>
+
+              <div class="donut-wrap">
+                <svg id="donut-chart" viewBox="0 0 160 160" width="160" height="160"></svg>
+                <div class="donut-center">
+                  <span id="donut-total">120</span>
+                  <small>Total Jam</small>
+                </div>
+              </div>
+
+              <ul class="legend" id="legend-list">
+                <!-- diisi oleh script.js -->
+              </ul>
+            </div>
+
+            <div class="card task-card">
+              <div class="card-header">
+                <h2>Tugas Kursus</h2>
+                <a href="#" class="see-all">Lihat Semua</a>
+              </div>
+              <ul class="task-list" id="task-list">
+                <!-- diisi oleh script.js -->
+              </ul>
+            </div>
+
+          </aside>
+
+        </div>
+      </div>
+
+      <div id="courses-page" class="page-section hidden">
+        <div class="section-header course-page-header">
+          <div>
+            <h2>Library Courses</h2>
+            <p class="section-subtitle">Semua materi video dan e-book pembelajaran dalam satu tempat.</p>
+          </div>
+          <div class="courses-header-actions">
+            <div class="course-filter" id="course-filter">
+              <button class="filter-pill active" data-filter="all">Semua</button>
+              <button class="filter-pill" data-filter="video">Video</button>
+              <button class="filter-pill" data-filter="ebook">E-book</button>
+            </div>
+            <button class="btn-cta simple" id="new-resource-btn">Tambah Materi</button>
+          </div>
+        </div>
+
+        <div class="courses-grid" id="courses-library">
+          <!-- diisi oleh script.js dari data backend -->
+        </div>
+      </div>
+
+      <div id="assignments-page" class="page-section hidden">
+        <div class="section-header">
+          <div>
+            <h2>Assignments</h2>
+            <p class="section-subtitle">Daftar tugas yang dihasilkan dari kursus atau ditugaskan manual.</p>
+          </div>
+        </div>
+
+        <div class="assignments-section">
+          <div class="assignments-section-header">
+            <h3>Tugas Aktif</h3>
+            <span id="pending-count" class="section-note"></span>
+          </div>
+          <div class="assignments-grid" id="pending-assignments-list">
+            <!-- pending assignments populated by script.js -->
+          </div>
+        </div>
+
+        <div class="assignments-section assignments-history-section">
+          <div class="assignments-section-header">
+            <h3>Riwayat Pengerjaan</h3>
+            <span id="completed-count" class="section-note"></span>
+          </div>
+          <div class="assignments-grid" id="completed-assignments-list">
+            <!-- completed assignments populated by script.js -->
+          </div>
+        </div>
+      </div>
+
+      <div id="events-page" class="page-section hidden">
+        <div class="section-header">
+          <div>
+            <h2>Events</h2>
+            <p class="section-subtitle">Webinar dan grup belajar interaktif dengan Zoom, tersedia gratis dan berbayar.</p>
+          </div>
+        </div>
+
+        <div class="events-grid" id="events-list">
+          <!-- event cards populated by script.js -->
+        </div>
+      </div>
+
+      <div id="admin-panel-page" class="page-section hidden">
+        <div class="section-header">
+          <div>
+            <h2>Admin Panel</h2>
+            <p class="section-subtitle">Kelola seluruh konten platform dan akses pengguna.</p>
+          </div>
+        </div>
+
+        <div class="admin-panel-grid">
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Kelola User</h3>
+            </div>
+            <div id="admin-users-list" class="admin-list"></div>
+          </div>
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Kontrol Kursus</h3>
+            </div>
+            <p class="admin-hint">Admin dapat menambah, mengedit, dan menghapus materi kursus.</p>
+            <button class="btn-primary" id="admin-open-course-modal">Tambah Materi</button>
+          </div>
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Kontrol Event</h3>
+            </div>
+            <p class="admin-hint">Admin dapat mengelola webinar dan grup belajar.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="settings-page" class="page-section hidden">
+        <div class="section-header">
+          <div>
+            <h2>Settings</h2>
+            <p class="section-subtitle">Kelola profil, keamanan, dan preferensi tampilan sesuai kebutuhan belajar Anda.</p>
+          </div>
+        </div>
+
+        <div class="settings-layout">
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Profil</h3>
+            </div>
+            <form id="settings-profile-form" class="settings-form">
+              <div class="form-group">
+                <label for="settings-name">Nama Lengkap</label>
+                <input id="settings-name" name="name" class="form-input" type="text" placeholder="Masukkan nama lengkap" />
+              </div>
+              <div class="form-group">
+                <label for="settings-email">Email</label>
+                <input id="settings-email" name="email" class="form-input" type="email" placeholder="contoh@email.com" />
+              </div>
+              <div class="form-group">
+                <label for="settings-avatar">URL Avatar</label>
+                <input id="settings-avatar" name="avatar_url" class="form-input" type="url" placeholder="https://example.com/avatar.jpg" />
+              </div>
+              <div class="modal-actions">
+                <button type="submit" class="btn-primary">Simpan Profil</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Keamanan</h3>
+            </div>
+            <form id="settings-password-form" class="settings-form">
+              <div class="form-group">
+                <label for="old-password">Password Lama</label>
+                <input id="old-password" name="old_password" class="form-input" type="password" placeholder="Masukkan password lama" />
+              </div>
+              <div class="form-group">
+                <label for="new-password">Password Baru</label>
+                <input id="new-password" name="new_password" class="form-input" type="password" placeholder="Minimal 6 karakter" />
+              </div>
+              <div class="form-group">
+                <label for="confirm-password">Konfirmasi Password Baru</label>
+                <input id="confirm-password" name="confirm_password" class="form-input" type="password" placeholder="Ulangi password baru" />
+              </div>
+              <div class="modal-actions">
+                <button type="submit" class="btn-primary">Ubah Password</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Preferensi</h3>
+            </div>
+            <form id="settings-notifications-form" class="settings-form">
+              <label class="toggle-row">
+                <span>Notifikasi Tugas</span>
+                <input type="checkbox" name="assignments" checked />
+              </label>
+              <label class="toggle-row">
+                <span>Notifikasi Pesan</span>
+                <input type="checkbox" name="messages" checked />
+              </label>
+              <label class="toggle-row">
+                <span>Notifikasi Event</span>
+                <input type="checkbox" name="events" checked />
+              </label>
+              <label class="toggle-row">
+                <span>Mode Gelap</span>
+                <input type="checkbox" name="dark_mode" />
+              </label>
+              <div class="modal-actions">
+                <button type="submit" class="btn-primary">Simpan Preferensi</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+  <div id="event-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-label">Event</div>
+          <h3 id="event-modal-title" class="modal-title">Judul Event</h3>
+          <div id="event-modal-type" class="modal-type">Webinar / Grup Belajar</div>
+        </div>
+        <button class="modal-close" onclick="closeEventModal()" aria-label="Tutup">×</button>
+      </div>
+      <div class="modal-body" id="event-modal-body"></div>
+    </div>
+  </div>
+
+  <div id="resource-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-label">Materi</div>
+          <h3 id="resource-modal-title" class="modal-title">Judul Kursus</h3>
+          <div id="resource-modal-type" class="modal-type">Video Pembelajaran</div>
+        </div>
+        <button class="modal-close" onclick="closeResourceModal()" aria-label="Tutup">×</button>
+      </div>
+      <div class="modal-body" id="resource-modal-body"></div>
+    </div>
+  </div>
+
+  <div id="assignment-modal" class="modal hidden">
+    <div class="modal-card assignment-modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-label">Tugas</div>
+          <h3 id="assignment-modal-title" class="modal-title">Judul Tugas</h3>
+          <div id="assignment-modal-course" class="modal-type">Kursus Terkait</div>
+        </div>
+        <button class="modal-close" onclick="closeAssignmentModal()" aria-label="Tutup">×</button>
+      </div>
+      <div class="modal-body" id="assignment-modal-body"></div>
+      <div class="modal-actions" id="assignment-modal-actions"></div>
+    </div>
+  </div>
+
+  <div id="course-add-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-label">Tambah Materi</div>
+          <h3 class="modal-title">Buat Kursus Baru</h3>
+        </div>
+        <button class="modal-close" id="close-course-add-modal" aria-label="Tutup">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="course-add-form" class="form-modal">
+          <div class="form-group">
+            <label for="title">Judul Materi</label>
+            <input id="title" name="title" class="form-input" placeholder="Contoh: Belajar Flask" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="type">Tipe</label>
+              <select id="type" name="type" class="form-select">
+                <option value="video">Video</option>
+                <option value="ebook">E-book</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="duration">Durasi / Halaman</label>
+              <input id="duration" name="duration" class="form-input" placeholder="Contoh: 1 jam 20 menit" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="author">Nama Pengajar</label>
+            <input id="author" name="author" class="form-input" placeholder="Contoh: Mentor Aulia" />
+          </div>
+          <div class="form-group">
+            <label for="resource_url">Link Video / E-book</label>
+            <input id="resource_url" name="resource_url" class="form-input" placeholder="https://..." required />
+          </div>
+          <div class="form-group">
+            <label for="description">Deskripsi Singkat</label>
+            <textarea id="description" name="description" class="form-textarea" placeholder="Deskripsi singkat materi"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeCourseAddModal()">Batal</button>
+            <button type="submit" class="btn-primary">Simpan Materi</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-create-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-label">Pesan</div>
+          <h3 class="modal-title">Buat Percakapan Baru</h3>
+        </div>
+        <button class="modal-close" id="chat-create-close" aria-label="Tutup">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="chat-create-form" class="form-modal">
+          <div class="form-group">
+            <label for="chat-type">Jenis Percakapan</label>
+            <select id="chat-type" name="type" class="form-select">
+              <option value="private">Chat Pribadi</option>
+              <option value="group">Grup</option>
+            </select>
+          </div>
+          <div id="chat-group-name-wrap" class="form-group hidden">
+            <label for="chat-group-name">Nama Grup</label>
+            <input id="chat-group-name" name="name" class="form-input" placeholder="Contoh: Grup Belajar Python" />
+          </div>
+          <div class="form-group">
+            <label>Anggota</label>
+            <div id="chat-user-list" class="chat-user-list"></div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="document.getElementById('chat-create-modal').classList.add('hidden')">Batal</button>
+            <button type="submit" class="btn-primary">Buat Percakapan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
