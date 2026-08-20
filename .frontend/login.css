@@ -328,11 +328,11 @@ body {
 /* ===================== BUTTONS ===================== */
 .btn-login {
   width: 100%;
-  padding: 14px 18px;
+  padding: 14px;
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
   color: white;
   border: none;
-  border-radius: 999px;
+  border-radius: 12px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -404,7 +404,7 @@ body {
   background: var(--bg-white);
   color: var(--text-dark);
   border: 1.5px solid var(--border);
-  border-radius: 999px;
+  border-radius: 12px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
