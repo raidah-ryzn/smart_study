@@ -46,6 +46,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Utility: used by login.js / signup.js to hide role-specific fields.
+   FIX: this class was missing from login.css, so toggling it on
+   #admin-code-group / #verification-code-group had no visual effect. */
+.hidden {
+  display: none !important;
+}
+
 /* ===================== LOGIN CONTAINER ===================== */
 .login-container {
   display: flex;
@@ -268,6 +275,31 @@ body {
   box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
+.form-group select {
+  width: 100%;
+  padding: 12px 40px 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-dark);
+  background: var(--bg-light);
+  cursor: pointer;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--primary) 50%), linear-gradient(135deg, var(--primary) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background-color: var(--bg-white);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
 .password-wrapper {
   position: relative;
 }
@@ -332,7 +364,7 @@ body {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
   color: white;
   border: none;
-  border-radius: 12px;
+  border-radius: 16px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
