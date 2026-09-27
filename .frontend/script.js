@@ -31,10 +31,6 @@ function showAlert(message, type = 'default') {
   }
 }
 
-function handleLogout() {
-  logout();
-}
-
 // Load dashboard data
 async function loadDashboard() {
   try {
@@ -72,7 +68,7 @@ async function loadDashboard() {
     // initialize task controls after DOM nodes exist
     initializeCourseActions();
     setupAddCourseButton();
-    renderEvents(eventData);
+    await loadEvents();
     renderDonut(data.progress);
     renderLegend(data.progress);
     renderTasks(data.tasks);
@@ -84,7 +80,11 @@ async function loadDashboard() {
 }
 
 // Logout function
+let isLoggingOut = false;
+
 async function logout() {
+  if (isLoggingOut) return;
+  isLoggingOut = true;
   try {
     const response = await fetch('/api/logout', {
       method: 'POST',
@@ -93,11 +93,10 @@ async function logout() {
       }
     });
 
-    if (response.ok) {
-      window.location.href = '/login';
-    }
+    window.location.replace('/login');
   } catch (error) {
     console.error('Logout error:', error);
+    isLoggingOut = false;
   }
 }
 
@@ -215,6 +214,18 @@ const eventData = [
   }
 ];
 
+async function loadEvents() {
+  try {
+    const response = await fetch('/api/events');
+    const events = await response.json();
+    eventData.splice(0, eventData.length, ...events);
+    renderEvents(eventData);
+  } catch (error) {
+    console.error('Load events error:', error);
+    renderEvents(eventData);
+  }
+}
+
 function renderCourses(courses) {
   const el = document.getElementById("course-row");
   el.innerHTML = courses.map(c => `
@@ -275,6 +286,10 @@ function renderCourseLibrary(courses) {
 function renderEvents(events) {
   const el = document.getElementById('events-list');
   if (!el) return;
+  if (!events.length) {
+    el.innerHTML = '<div class="empty-state">Belum ada webinar yang tersedia.</div>';
+    return;
+  }
   el.innerHTML = events.map(e => `
     <div class="event-card" data-event-id="${e.id}">
       <div class="event-card-top">
@@ -549,10 +564,89 @@ async function loadAssignments() {
     const res = await fetch('/api/assignments');
     if (!res.ok) return;
     const items = await res.json();
+    window.assignmentItems = items;
     renderAssignments(items);
     setupAssignmentActions();
+    if (String(window.currentUserRole || 'user').toLowerCase() === 'admin') {
+      await loadAdminSubmissions();
+    }
   } catch (err) {
     console.error('Load assignments error', err);
+  }
+}
+
+async function loadAdminSubmissions() {
+  const section = document.getElementById('admin-submissions-section');
+  const container = document.getElementById('admin-submissions-list');
+  if (!section || !container || String(window.currentUserRole || 'user').toLowerCase() !== 'admin') return;
+  const refreshButton = document.getElementById('admin-refresh-submissions');
+  if (refreshButton && refreshButton.dataset.bound !== 'true') {
+    refreshButton.dataset.bound = 'true';
+    refreshButton.addEventListener('click', loadAdminSubmissions);
+  }
+  section.classList.remove('hidden');
+  try {
+    const response = await fetch('/api/admin/assignment-submissions');
+    if (!response.ok) return;
+    const submissions = await response.json();
+    if (!submissions.length) {
+      container.innerHTML = '<div class="empty-state">Belum ada user yang mengumpulkan tugas.</div>';
+      return;
+    }
+    container.innerHTML = submissions.map(submission => `
+      <form class="admin-submission-item" data-submission-id="${submission.id}">
+        <div class="admin-submission-heading">
+          <div>
+            <strong>${submission.user_name}</strong>
+            <span>${submission.user_email}</span>
+          </div>
+          <span class="admin-review-badge ${submission.review_status}">${submission.review_status === 'correct' ? 'Benar' : submission.review_status === 'needs_revision' ? 'Perlu Perbaikan' : 'Belum Direview'}</span>
+        </div>
+        <div class="admin-submission-task">${submission.assignment_title}</div>
+        <div class="admin-submission-file">
+          <span>${submission.original_filename}</span>
+          <small>${new Date(submission.submitted_at).toLocaleString('id-ID')}</small>
+          <a href="/api/admin/assignment-submissions/${submission.id}/file" target="_blank" rel="noopener">Buka file</a>
+        </div>
+        <div class="admin-review-controls">
+          <label>Status review<select name="review_status">
+            <option value="correct" ${submission.review_status === 'correct' ? 'selected' : ''}>Benar</option>
+            <option value="needs_revision" ${submission.review_status === 'needs_revision' ? 'selected' : ''}>Perlu Perbaikan</option>
+          </select></label>
+          <label>Feedback<textarea name="feedback" rows="2" placeholder="Catatan untuk user">${submission.feedback || ''}</textarea></label>
+        </div>
+        <button type="submit" class="btn-primary admin-save-review">Simpan Review</button>
+        <span class="admin-review-message" role="status"></span>
+      </form>
+    `).join('');
+
+    container.querySelectorAll('.admin-submission-item').forEach(form => {
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        const message = form.querySelector('.admin-review-message');
+        button.disabled = true;
+        try {
+          const response = await fetch(`/api/admin/assignment-submissions/${form.dataset.submissionId}/review`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              review_status: form.elements.review_status.value,
+              feedback: form.elements.feedback.value.trim(),
+            }),
+          });
+          const data = await response.json();
+          message.textContent = data.message || 'Review gagal disimpan.';
+          message.style.color = response.ok ? '#15803d' : '#b91c1c';
+          if (response.ok) await loadAdminSubmissions();
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Load admin submissions error:', error);
+    container.innerHTML = '<div class="empty-state">Gagal memuat pengumpulan tugas.</div>';
   }
 }
 
@@ -583,6 +677,15 @@ function renderAssignmentCard(a) {
   const actionButton = a.completed
     ? `<button class="btn-secondary repeat-assignment-btn assignment-button">Kerjakan Kembali</button>`
     : `<button class="btn-primary complete-assignment-btn assignment-button">Selesaikan</button>`;
+  const adminEditButton = String(window.currentUserRole || 'user').toLowerCase() === 'admin'
+    ? `<button class="assignment-edit-btn" data-assignment-id="${a.id}">Edit</button>`
+    : '';
+  const submissionLabel = a.submission_filename
+    ? `Terkumpul: ${a.submission_filename}`
+    : 'Belum ada file dikumpulkan';
+  const reviewLabel = a.submission_filename && a.review_status && a.review_status !== 'pending'
+    ? ` • ${a.review_status === 'correct' ? 'Benar' : 'Perlu Perbaikan'}`
+    : '';
 
   return `
     <div class="assignment-item card ${a.completed ? 'assignment-completed' : ''}" data-assign-id="${a.id}">
@@ -590,6 +693,7 @@ function renderAssignmentCard(a) {
         <div>
           <div class="assignment-title">${a.title}</div>
           <div class="assignment-course">${a.course_title || 'Kursus tanpa judul'}</div>
+          ${a.description ? `<div class="assignment-description">${a.description}</div>` : ''}
         </div>
         <div>
           <span class="assignment-status">${a.completed ? 'Selesai' : 'Tertunda'}</span>
@@ -597,7 +701,17 @@ function renderAssignmentCard(a) {
       </div>
       <div class="assignment-actions">
         ${actionButton}
+        ${adminEditButton}
       </div>
+      <form class="assignment-submit-form" data-assignment-id="${a.id}">
+        <label class="assignment-file-label" for="assignment-file-${a.id}">Kumpulkan file
+          <span class="assignment-file-picker">Pilih file dari perangkat</span>
+          <input id="assignment-file-${a.id}" type="file" name="submission" required />
+          <span class="assignment-selected-file">Belum memilih file</span>
+        </label>
+        <button type="submit" class="btn-primary assignment-submit-btn">Kumpulkan Tugas</button>
+        <span class="assignment-submission-status">${submissionLabel}${reviewLabel}</span>
+      </form>
     </div>
   `;
 }
@@ -634,6 +748,89 @@ function setupAssignmentActions() {
         showAlert('Gagal menghubungi server', 'error');
       }
     });
+  });
+
+  document.querySelectorAll('.assignment-submit-form').forEach(form => {
+    const fileInput = form.querySelector('input[type="file"]');
+    const selectedFile = form.querySelector('.assignment-selected-file');
+    fileInput.addEventListener('change', () => {
+      selectedFile.textContent = fileInput.files.length ? fileInput.files[0].name : 'Belum memilih file';
+      selectedFile.classList.toggle('has-file', Boolean(fileInput.files.length));
+    });
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/assignments/${form.dataset.assignmentId}/submit`, {
+          method: 'POST',
+          body: new FormData(form),
+        });
+        const data = await response.json();
+        showAlert(data.message || 'Gagal mengumpulkan tugas', response.ok ? 'success' : 'error');
+        if (response.ok) await loadAssignments();
+      } catch (error) {
+        console.error('Submit assignment error:', error);
+        showAlert('Gagal menghubungi server', 'error');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('.assignment-edit-btn').forEach(button => {
+    button.addEventListener('click', () => {
+      const assignment = window.assignmentItems?.find(item => String(item.id) === String(button.dataset.assignmentId));
+      if (assignment) openAdminAssignmentForm(assignment);
+    });
+  });
+}
+
+function openAdminAssignmentForm(assignment = null) {
+  const form = document.getElementById('admin-assignment-form');
+  if (!form) return;
+  const courseSelect = document.getElementById('admin-assignment-course');
+  courseSelect.innerHTML = '<option value="">Tugas umum</option>' + courseList.map(course => `<option value="${course.id}">${course.title}</option>`).join('');
+  form.classList.remove('hidden');
+  document.getElementById('admin-assignment-id').value = assignment?.id || '';
+  document.getElementById('admin-assignment-title').value = assignment?.title || '';
+  courseSelect.value = assignment?.course_id || '';
+  document.getElementById('admin-assignment-description').value = assignment?.description || '';
+  document.getElementById('admin-assignment-form-title').textContent = assignment ? 'Edit tugas' : 'Tambah tugas manual';
+  document.getElementById('admin-assignment-title').focus();
+}
+
+function setupAdminAssignmentEditor() {
+  const toggle = document.getElementById('admin-toggle-assignment-form');
+  const form = document.getElementById('admin-assignment-form');
+  const cancel = document.getElementById('admin-cancel-assignment');
+  if (!toggle || !form || toggle.dataset.bound === 'true') return;
+  toggle.dataset.bound = 'true';
+  toggle.addEventListener('click', () => openAdminAssignmentForm());
+  cancel.addEventListener('click', () => form.classList.add('hidden'));
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const id = document.getElementById('admin-assignment-id').value;
+    const payload = {
+      title: document.getElementById('admin-assignment-title').value.trim(),
+      course_id: document.getElementById('admin-assignment-course').value || null,
+      description: document.getElementById('admin-assignment-description').value.trim(),
+    };
+    const response = await fetch(id ? `/api/admin/assignments/${id}` : '/api/admin/assignments', {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    const message = document.getElementById('admin-assignment-message');
+    message.textContent = data.message || 'Operasi gagal';
+    message.style.color = response.ok ? '#15803d' : '#b91c1c';
+    if (response.ok) {
+      form.reset();
+      form.classList.add('hidden');
+      await loadAssignments();
+      await refreshProgressFromServer();
+    }
   });
 }
 
@@ -833,10 +1030,10 @@ function applyRoleVisibility() {
   const isAdmin = String(window.currentUserRole || 'user').toLowerCase() === 'admin';
   adminMenu.classList.toggle('hidden', !isAdmin);
 
-  const adminButtons = document.querySelectorAll('.add-task-btn, .complete-course-btn, .complete-task-btn, #new-resource-btn, #admin-open-course-modal');
+  const adminButtons = document.querySelectorAll('.add-task-btn, .complete-course-btn, .complete-task-btn, #new-resource-btn, #admin-open-course-modal, #admin-open-event-form, #admin-toggle-assignment-form');
   adminButtons.forEach(button => {
     if (button && button.dataset.roleLocked !== 'always') {
-      button.style.display = isAdmin ? '' : 'none';
+      button.classList.toggle('hidden', !isAdmin);
     }
   });
 }
@@ -909,6 +1106,99 @@ async function loadAdminUsers() {
   }
 }
 
+function setupAdminCreateUser() {
+  const form = document.getElementById('admin-create-user-form');
+  if (!form) return;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const message = document.getElementById('admin-create-user-message');
+    const button = form.querySelector('button[type="submit"]');
+    const payload = {
+      name: document.getElementById('admin-user-name').value.trim(),
+      email: document.getElementById('admin-user-email').value.trim(),
+      password: document.getElementById('admin-user-password').value,
+      password_confirm: document.getElementById('admin-user-password-confirm').value,
+      verification_code: document.getElementById('admin-user-code').value.trim(),
+    };
+
+    button.disabled = true;
+    message.textContent = '';
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      message.textContent = data.message || 'Operasi gagal';
+      message.style.color = response.ok ? '#15803d' : '#b91c1c';
+      if (response.ok) {
+        form.reset();
+        await loadAdminUsers();
+      }
+    } catch (error) {
+      console.error('Create participant error:', error);
+      message.textContent = 'Terjadi kesalahan. Coba lagi.';
+      message.style.color = '#b91c1c';
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+function setupAdminEventForm() {
+  const form = document.getElementById('admin-create-event-form');
+  if (!form || form.dataset.bound === 'true') return;
+  form.dataset.bound = 'true';
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const message = document.getElementById('admin-create-event-message');
+    const button = form.querySelector('button[type="submit"]');
+    const payload = {
+      title: document.getElementById('admin-event-title').value.trim(),
+      event_time: document.getElementById('admin-event-time').value,
+      description: document.getElementById('admin-event-description').value.trim(),
+      zoom_link: document.getElementById('admin-event-link').value.trim(),
+    };
+
+    button.disabled = true;
+    message.textContent = '';
+    try {
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      message.textContent = data.message || 'Operasi gagal';
+      message.style.color = response.ok ? '#15803d' : '#b91c1c';
+      if (response.ok) {
+        form.reset();
+        await loadEvents();
+      }
+    } catch (error) {
+      console.error('Create webinar error:', error);
+      message.textContent = 'Terjadi kesalahan. Coba lagi.';
+      message.style.color = '#b91c1c';
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+function setupAdminEventShortcut() {
+  const button = document.getElementById('admin-open-event-form');
+  const adminMenu = document.getElementById('admin-panel-menu');
+  if (!button || !adminMenu || button.dataset.bound === 'true') return;
+  button.dataset.bound = 'true';
+  button.addEventListener('click', () => {
+    adminMenu.click();
+    window.setTimeout(() => document.getElementById('admin-event-title')?.focus(), 0);
+  });
+}
+
 function setupPageNavigation() {
   const items = document.querySelectorAll('.menu-item[data-page]');
   items.forEach(item => {
@@ -920,15 +1210,17 @@ function setupPageNavigation() {
       showPage(page);
       if (page === 'assignment') {
         await loadAssignments();
+        setupAdminAssignmentEditor();
       }
       if (page === 'events') {
-        renderEvents(eventData);
+        await loadEvents();
       }
       if (page === 'settings') {
         await loadSettings();
       }
       if (page === 'admin-panel') {
         await loadAdminUsers();
+        setupAdminEventForm();
       }
     });
   });
@@ -1483,6 +1775,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupLogoutButton();
     setupPageNavigation();
     setupCourseFilter();
+    setupAdminCreateUser();
+    setupAdminEventForm();
+    setupAdminEventShortcut();
+    setupAdminAssignmentEditor();
     setupSettingsForms();
     initNotificationBell();
     initMessagePanel();

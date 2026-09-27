@@ -1,0 +1,17 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Local configuration and user data
+.env
+.env.*
+!.env.example
+.frontend/users.json
+uploads/
+*.db
+*.sqlite
+*.sqlite3

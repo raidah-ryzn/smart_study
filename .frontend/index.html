@@ -37,7 +37,7 @@
         <a href="#" class="menu-item" data-page="settings">
           <span class="menu-icon">⚙</span> Settings
         </a>
-        <a href="#" class="menu-item" onclick="handleLogout(); return false;" data-page="logout">
+        <a href="/api/logout" class="menu-item" data-page="logout">
           <span class="menu-icon">⏻</span> Logout
         </a>
       </nav>
@@ -203,7 +203,24 @@
             <h2>Assignments</h2>
             <p class="section-subtitle">Daftar tugas yang dihasilkan dari kursus atau ditugaskan manual.</p>
           </div>
+          <button type="button" id="admin-toggle-assignment-form" class="btn-primary hidden">Tambah Tugas</button>
         </div>
+
+        <form id="admin-assignment-form" class="assignment-admin-form hidden">
+          <div class="assignment-admin-heading">
+            <div>
+              <span class="admin-eyebrow">ADMIN EDITOR</span>
+              <h3 id="admin-assignment-form-title">Tambah tugas manual</h3>
+            </div>
+            <button type="button" id="admin-cancel-assignment" class="btn-secondary">Batal</button>
+          </div>
+          <input type="hidden" id="admin-assignment-id" />
+          <label>Judul tugas<input type="text" id="admin-assignment-title" required placeholder="Contoh: Analisis materi minggu ini" /></label>
+          <label>Materi terkait<select id="admin-assignment-course"><option value="">Tugas umum</option></select></label>
+          <label>Instruksi tugas<textarea id="admin-assignment-description" rows="4" placeholder="Tuliskan instruksi pengumpulan tugas"></textarea></label>
+          <button type="submit" class="btn-primary">Simpan Tugas</button>
+          <div id="admin-assignment-message" class="admin-hint" role="status"></div>
+        </form>
 
         <div class="assignments-section">
           <div class="assignments-section-header">
@@ -224,6 +241,17 @@
             <!-- completed assignments populated by script.js -->
           </div>
         </div>
+
+        <section id="admin-submissions-section" class="admin-submissions-section hidden">
+          <div class="assignments-section-header">
+            <div>
+              <h3>Pengumpulan Peserta</h3>
+              <p class="section-note">Buka file, cek jawaban, lalu beri status dan feedback.</p>
+            </div>
+            <button type="button" id="admin-refresh-submissions" class="btn-secondary">Refresh</button>
+          </div>
+          <div id="admin-submissions-list" class="admin-submissions-list"></div>
+        </section>
       </div>
 
       <div id="events-page" class="page-section hidden">
@@ -232,6 +260,7 @@
             <h2>Events</h2>
             <p class="section-subtitle">Webinar dan grup belajar interaktif dengan Zoom, tersedia gratis dan berbayar.</p>
           </div>
+          <button type="button" id="admin-open-event-form" class="btn-primary hidden">Tambah Webinar</button>
         </div>
 
         <div class="events-grid" id="events-list">
@@ -240,33 +269,66 @@
       </div>
 
       <div id="admin-panel-page" class="page-section hidden">
-        <div class="section-header">
+        <div class="admin-hero">
           <div>
+            <span class="admin-eyebrow">CONTROL CENTER</span>
             <h2>Admin Panel</h2>
-            <p class="section-subtitle">Kelola seluruh konten platform dan akses pengguna.</p>
+            <p class="section-subtitle">Kelola akses peserta dan konten pembelajaran dari satu tempat.</p>
           </div>
+          <div class="admin-status"><span class="admin-status-dot"></span>Admin aktif</div>
         </div>
 
         <div class="admin-panel-grid">
-          <div class="settings-card">
-            <div class="settings-card-header">
+          <section class="settings-card admin-users-card">
+            <div class="settings-card-header admin-card-heading">
+              <div class="admin-card-icon">✦</div>
+              <div>
               <h3>Kelola User</h3>
+                <p>Buat kredensial peserta dan atur aksesnya.</p>
+              </div>
             </div>
+            <form id="admin-create-user-form" class="settings-form">
+              <div class="admin-form-grid">
+                <label>Nama peserta<input type="text" id="admin-user-name" placeholder="Contoh: Siti Aminah" required /></label>
+                <label>Email peserta<input type="email" id="admin-user-email" placeholder="siti@example.com" required /></label>
+                <label>Password<input type="password" id="admin-user-password" placeholder="Minimal 6 karakter" minlength="6" required /></label>
+                <label>Konfirmasi password<input type="password" id="admin-user-password-confirm" placeholder="Ulangi password" minlength="6" required /></label>
+                <label class="admin-code-field">Kode login peserta<input type="text" id="admin-user-code" placeholder="Contoh: KELAS-A01" required /></label>
+              </div>
+              <button type="submit" class="btn-primary">Buat Akun Peserta</button>
+              <div id="admin-create-user-message" class="admin-hint" role="status"></div>
+            </form>
             <div id="admin-users-list" class="admin-list"></div>
-          </div>
-          <div class="settings-card">
-            <div class="settings-card-header">
+          </section>
+          <section class="settings-card admin-control-card">
+            <div class="settings-card-header admin-card-heading">
+              <div class="admin-card-icon orange">◈</div>
+              <div>
               <h3>Kontrol Kursus</h3>
+                <p>Atur materi yang tersedia untuk peserta.</p>
+              </div>
             </div>
             <p class="admin-hint">Admin dapat menambah, mengedit, dan menghapus materi kursus.</p>
             <button class="btn-primary" id="admin-open-course-modal">Tambah Materi</button>
-          </div>
-          <div class="settings-card">
-            <div class="settings-card-header">
+          </section>
+          <section class="settings-card admin-control-card">
+            <div class="settings-card-header admin-card-heading">
+              <div class="admin-card-icon green">◉</div>
+              <div>
               <h3>Kontrol Event</h3>
+                <p>Jaga agenda komunitas tetap teratur.</p>
+              </div>
             </div>
             <p class="admin-hint">Admin dapat mengelola webinar dan grup belajar.</p>
-          </div>
+            <form id="admin-create-event-form" class="settings-form admin-event-form">
+              <label>Judul webinar<input type="text" id="admin-event-title" required /></label>
+              <label>Waktu webinar<input type="datetime-local" id="admin-event-time" required /></label>
+              <label>Deskripsi<textarea id="admin-event-description" rows="3" required></textarea></label>
+              <label>Link Zoom<input type="url" id="admin-event-link" placeholder="https://zoom.us/j/..." required /></label>
+              <button type="submit" class="btn-primary">Tambah Webinar</button>
+              <div id="admin-create-event-message" class="admin-hint" role="status"></div>
+            </form>
+          </section>
         </div>
       </div>
 

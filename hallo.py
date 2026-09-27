@@ -9,12 +9,16 @@ from functools import wraps
 import mysql.connector
 from flask import Flask, jsonify, send_from_directory, request, session, redirect
 from mysql.connector import Error
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__, template_folder='.frontend', static_folder='.frontend')
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
+ADMIN_CODE = os.getenv('ADMIN_CODE', 'SMART-STUDY-ADMIN')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / '.frontend'
+UPLOAD_DIR = BASE_DIR / 'uploads' / 'assignments'
 
 
 def get_default_dashboard():
@@ -115,7 +119,8 @@ def get_user_by_email(email):
         return None
 
 
-def create_user(email, name, password_hash=None, google_id=None, profile_picture=None):
+def create_user(email, name, password_hash=None, google_id=None, profile_picture=None,
+                role='user', verification_code=None, is_verified=0):
     conn = get_db_connection('smart_study')
     if not conn:
         return None
@@ -124,8 +129,9 @@ def create_user(email, name, password_hash=None, google_id=None, profile_picture
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO users (email, name, password_hash, google_id, profile_picture, role, verification_code, is_verified)
-            VALUES (%s, %s, %s, %s, %s, 'user', NULL, 0)
-        ''', (email, name, password_hash, google_id, profile_picture))
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (email, name, password_hash, google_id, profile_picture,
+                            role, verification_code, is_verified))
         user_id = cursor.lastrowid
         
         cursor.execute('UPDATE users SET last_login = NOW() WHERE id = %s', (user_id,))
@@ -355,6 +361,17 @@ def init_db():
             )
         ''')
 
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS events (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                event_time DATETIME NOT NULL,
+                description TEXT NOT NULL,
+                zoom_link VARCHAR(512) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         # Add resource_url if table exists without it
         try:
             cursor.execute('ALTER TABLE courses ADD COLUMN IF NOT EXISTS resource_url VARCHAR(512)')
@@ -368,11 +385,46 @@ def init_db():
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 course_id INT,
                 title VARCHAR(255) NOT NULL,
+                description TEXT,
                 completed TINYINT(1) DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
             )
         ''')
+
+        try:
+            cursor.execute('ALTER TABLE assignments ADD COLUMN IF NOT EXISTS description TEXT')
+        except Exception:
+            pass
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS assignment_submissions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                assignment_id INT NOT NULL,
+                user_id INT NOT NULL,
+                original_filename VARCHAR(255) NOT NULL,
+                stored_filename VARCHAR(255) NOT NULL,
+                review_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                feedback TEXT,
+                reviewed_by INT NULL,
+                reviewed_at DATETIME NULL,
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_assignment_user (assignment_id, user_id),
+                FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+
+        for column, definition in {
+            'review_status': "VARCHAR(20) NOT NULL DEFAULT 'pending'",
+            'feedback': 'TEXT',
+            'reviewed_by': 'INT NULL',
+            'reviewed_at': 'DATETIME NULL',
+        }.items():
+            try:
+                cursor.execute(f'ALTER TABLE assignment_submissions ADD COLUMN IF NOT EXISTS {column} {definition}')
+            except Exception:
+                pass
 
         cursor.execute('SELECT COUNT(*) FROM dashboard_data')
         if cursor.fetchone()[0] == 0:
@@ -451,6 +503,10 @@ def api_courses():
             return jsonify([]), 200
 
     # POST -> create course
+    user = get_user_by_id(session.get('user_id')) if session.get('user_id') else None
+    if not user or str(user.get('role', 'user')).lower() != 'admin':
+        return jsonify({'message': 'Hanya admin yang dapat menambah kursus.'}), 403
+
     data = request.get_json() or {}
     title = data.get('title')
     author = data.get('author')
@@ -478,8 +534,81 @@ def api_courses():
         return jsonify({'message': 'Create failed'}), 500
 
 
+@app.route('/api/events', methods=['GET', 'POST'])
+def api_events():
+    if request.method == 'GET':
+        conn = get_db_connection('smart_study')
+        if not conn:
+            return jsonify([]), 200
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('''
+                SELECT id, title, event_time, description, zoom_link
+                FROM events
+                ORDER BY event_time ASC
+            ''')
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            for row in rows:
+                event_time = row.pop('event_time')
+                row['type'] = 'webinar'
+                row['speaker'] = 'Admin Smart Study'
+                row['date'] = event_time.strftime('%d %B %Y')
+                row['time'] = event_time.strftime('%H:%M WIB')
+                row['price'] = 'Gratis'
+                row['link'] = row.pop('zoom_link')
+            return jsonify(rows), 200
+        except Exception as exc:
+            print(f'Get events error: {exc}')
+            return jsonify([]), 200
+
+    if not session.get('user_id'):
+        return jsonify({'message': 'Unauthorized'}), 401
+    user = get_user_by_id(session['user_id'])
+    if not user or str(user.get('role', 'user')).lower() != 'admin':
+        return jsonify({'message': 'Hanya admin yang dapat menambah webinar.'}), 403
+
+    data = request.get_json() or {}
+    title = (data.get('title') or '').strip()
+    event_time = (data.get('event_time') or '').strip()
+    description = (data.get('description') or '').strip()
+    zoom_link = (data.get('zoom_link') or '').strip()
+    if not title or not event_time or not description or not zoom_link:
+        return jsonify({'message': 'Judul, waktu, deskripsi, dan link Zoom wajib diisi.'}), 400
+    if not zoom_link.startswith(('http://', 'https://')):
+        return jsonify({'message': 'Link Zoom harus berupa URL yang valid.'}), 400
+
+    try:
+        parsed_time = datetime.fromisoformat(event_time)
+    except ValueError:
+        return jsonify({'message': 'Format waktu webinar tidak valid.'}), 400
+
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify({'message': 'DB connection failed'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            'INSERT INTO events (title, event_time, description, zoom_link) VALUES (%s, %s, %s, %s)',
+            (title, parsed_time, description, zoom_link)
+        )
+        event_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'id': event_id, 'message': 'Webinar berhasil ditambahkan.'}), 201
+    except Exception as exc:
+        print(f'Create event error: {exc}')
+        return jsonify({'message': 'Gagal menambahkan webinar.'}), 500
+
+
 @app.route('/api/courses/<int:course_id>/complete', methods=['POST'])
 def api_course_complete(course_id):
+    user = get_user_by_id(session.get('user_id')) if session.get('user_id') else None
+    if not user or str(user.get('role', 'user')).lower() != 'admin':
+        return jsonify({'message': 'Hanya admin yang dapat mengubah kursus.'}), 403
+
     conn = get_db_connection('smart_study')
     if not conn:
         return jsonify({'message': 'DB connection failed'}), 500
@@ -504,8 +633,8 @@ def api_course_complete(course_id):
         if assignment_count == 0:
             task_title = f'Tugas: Kerjakan soal dari materi "{title}" untuk memperdalam pemahaman.'
             cursor.execute(
-                'INSERT INTO assignments (course_id, title, completed) VALUES (%s,%s,%s)',
-                (course_id, task_title, 0)
+                'INSERT INTO assignments (course_id, title, description, completed) VALUES (%s,%s,%s,%s)',
+                (course_id, task_title, description, 0)
             )
             conn.commit()
             for user_id in get_all_user_ids():
@@ -524,6 +653,10 @@ def api_course_complete(course_id):
 
 @app.route('/api/courses/<int:course_id>/assignments', methods=['POST'])
 def api_course_assignments(course_id):
+    user = get_user_by_id(session.get('user_id')) if session.get('user_id') else None
+    if not user or str(user.get('role', 'user')).lower() != 'admin':
+        return jsonify({'message': 'Hanya admin yang dapat menambah tugas.'}), 403
+
     data = request.get_json() or {}
     title = data.get('title', '').strip()
     if not title:
@@ -534,7 +667,7 @@ def api_course_assignments(course_id):
         return jsonify({'message': 'DB connection failed'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO assignments (course_id, title, completed) VALUES (%s,%s,%s)', (course_id, title, 0))
+        cursor.execute('INSERT INTO assignments (course_id, title, description, completed) VALUES (%s,%s,%s,%s)', (course_id, title, '', 0))
         assignment_id = cursor.lastrowid
         conn.commit()
 
@@ -613,11 +746,14 @@ def api_assignments():
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT a.id, a.course_id, a.title, a.completed, c.title AS course_title
+            SELECT a.id, a.course_id, a.title, a.description, a.completed, c.title AS course_title,
+                   s.original_filename AS submission_filename, s.submitted_at,
+                   s.review_status, s.feedback
             FROM assignments a
             LEFT JOIN courses c ON c.id = a.course_id
+            LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.user_id = %s
             ORDER BY a.created_at DESC
-        ''')
+        ''', (session.get('user_id') or 0,))
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -625,6 +761,218 @@ def api_assignments():
     except Exception as exc:
         print(f'Get assignments error: {exc}')
         return jsonify([]), 200
+
+
+def current_user_is_admin():
+    user = get_user_by_id(session.get('user_id')) if session.get('user_id') else None
+    return bool(user and str(user.get('role', 'user')).lower() == 'admin')
+
+
+@app.route('/api/admin/assignments', methods=['POST'])
+@admin_required
+def api_admin_create_assignment():
+    data = request.get_json() or {}
+    title = (data.get('title') or '').strip()
+    description = (data.get('description') or '').strip()
+    course_id = data.get('course_id') or None
+    if not title:
+        return jsonify({'message': 'Judul tugas wajib diisi.'}), 400
+
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify({'message': 'DB connection failed'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            'INSERT INTO assignments (course_id, title, description, completed) VALUES (%s, %s, %s, 0)',
+            (course_id, title, description)
+        )
+        assignment_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        conn.close()
+        for user_id in get_all_user_ids():
+            create_notification(user_id, 'Tugas baru ditambahkan', title, 'tugas')
+        return jsonify({'id': assignment_id, 'message': 'Tugas berhasil ditambahkan.'}), 201
+    except Exception as exc:
+        print(f'Admin create assignment error: {exc}')
+        return jsonify({'message': 'Gagal menambahkan tugas.'}), 500
+
+
+@app.route('/api/admin/assignments/<int:assignment_id>', methods=['PUT'])
+@admin_required
+def api_admin_update_assignment(assignment_id):
+    data = request.get_json() or {}
+    title = (data.get('title') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not title:
+        return jsonify({'message': 'Judul tugas wajib diisi.'}), 400
+
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify({'message': 'DB connection failed'}), 500
+    try:
+        cursor = conn.cursor()
+        if 'course_id' in data:
+            cursor.execute(
+                'UPDATE assignments SET title = %s, description = %s, course_id = %s WHERE id = %s',
+                (title, description, data.get('course_id') or None, assignment_id)
+            )
+        else:
+            cursor.execute(
+                'UPDATE assignments SET title = %s, description = %s WHERE id = %s',
+                (title, description, assignment_id)
+            )
+        if cursor.rowcount == 0:
+            cursor.close()
+            conn.close()
+            return jsonify({'message': 'Tugas tidak ditemukan.'}), 404
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Tugas berhasil diperbarui.'}), 200
+    except Exception as exc:
+        print(f'Admin update assignment error: {exc}')
+        return jsonify({'message': 'Gagal memperbarui tugas.'}), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>/submit', methods=['POST'])
+@require_login
+def api_assignment_submit(assignment_id):
+    uploaded_file = request.files.get('submission')
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({'message': 'Pilih file tugas terlebih dahulu.'}), 400
+
+    original_filename = secure_filename(uploaded_file.filename)
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify({'message': 'DB connection failed'}), 500
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT id FROM assignments WHERE id = %s', (assignment_id,))
+        if not cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({'message': 'Tugas tidak ditemukan.'}), 404
+
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        user_id = session['user_id']
+        stored_filename = f'{assignment_id}_{user_id}_{int(datetime.now().timestamp())}_{original_filename}'
+        uploaded_file.save(UPLOAD_DIR / stored_filename)
+        cursor.execute('''
+            INSERT INTO assignment_submissions (assignment_id, user_id, original_filename, stored_filename)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE original_filename = VALUES(original_filename),
+                                      stored_filename = VALUES(stored_filename),
+                                      review_status = 'pending', feedback = NULL,
+                                      reviewed_by = NULL, reviewed_at = NULL,
+                                      submitted_at = CURRENT_TIMESTAMP
+        ''', (assignment_id, user_id, original_filename, stored_filename))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Tugas berhasil dikumpulkan.', 'filename': original_filename}), 201
+    except Exception as exc:
+        print(f'Submit assignment error: {exc}')
+        return jsonify({'message': 'Gagal mengumpulkan tugas.'}), 500
+
+
+@app.route('/api/admin/assignment-submissions', methods=['GET'])
+@admin_required
+def api_admin_assignment_submissions():
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify([]), 200
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT s.id, s.assignment_id, s.user_id, s.original_filename,
+                   s.submitted_at, s.review_status, s.feedback,
+                   a.title AS assignment_title, u.name AS user_name, u.email AS user_email
+            FROM assignment_submissions s
+            INNER JOIN assignments a ON a.id = s.assignment_id
+            INNER JOIN users u ON u.id = s.user_id
+            ORDER BY s.submitted_at DESC
+        ''')
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify(rows), 200
+    except Exception as exc:
+        print(f'Get admin submissions error: {exc}')
+        return jsonify([]), 200
+
+
+@app.route('/api/admin/assignment-submissions/<int:submission_id>/file', methods=['GET'])
+@admin_required
+def api_admin_download_submission(submission_id):
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify({'message': 'DB connection failed'}), 500
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT stored_filename, original_filename FROM assignment_submissions WHERE id = %s', (submission_id,))
+        submission = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not submission:
+            return jsonify({'message': 'Submission tidak ditemukan.'}), 404
+        file_path = UPLOAD_DIR / submission['stored_filename']
+        if not file_path.is_file():
+            return jsonify({'message': 'File submission tidak ditemukan di server.'}), 404
+        return send_from_directory(UPLOAD_DIR, submission['stored_filename'], as_attachment=True, download_name=submission['original_filename'])
+    except Exception as exc:
+        print(f'Download submission error: {exc}')
+        return jsonify({'message': 'Gagal mengunduh file.'}), 500
+
+
+@app.route('/api/admin/assignment-submissions/<int:submission_id>/review', methods=['PUT'])
+@admin_required
+def api_admin_review_submission(submission_id):
+    data = request.get_json() or {}
+    review_status = (data.get('review_status') or '').strip().lower()
+    feedback = (data.get('feedback') or '').strip()
+    if review_status not in {'correct', 'needs_revision'}:
+        return jsonify({'message': 'Status review tidak valid.'}), 400
+
+    conn = get_db_connection('smart_study')
+    if not conn:
+        return jsonify({'message': 'DB connection failed'}), 500
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT s.user_id, s.feedback AS previous_feedback, a.title AS assignment_title
+            FROM assignment_submissions s
+            INNER JOIN assignments a ON a.id = s.assignment_id
+            WHERE s.id = %s
+        ''', (submission_id,))
+        submission = cursor.fetchone()
+        if not submission:
+            cursor.close()
+            conn.close()
+            return jsonify({'message': 'Submission tidak ditemukan.'}), 404
+
+        cursor.execute('''
+            UPDATE assignment_submissions
+            SET review_status = %s, feedback = %s, reviewed_by = %s, reviewed_at = NOW()
+            WHERE id = %s
+        ''', (review_status, feedback or None, session['user_id'], submission_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if feedback and feedback != (submission['previous_feedback'] or ''):
+            create_notification(
+                submission['user_id'],
+                'Feedback tugas tersedia',
+                f'Admin memberikan feedback untuk tugas "{submission["assignment_title"]}": {feedback}',
+                'tugas'
+            )
+
+        return jsonify({'message': 'Review submission berhasil disimpan.'}), 200
+    except Exception as exc:
+        print(f'Review submission error: {exc}')
+        return jsonify({'message': 'Gagal menyimpan review.'}), 500
 
 
 @app.route('/api/assignments/<int:assignment_id>/complete', methods=['POST'])
@@ -682,6 +1030,13 @@ def login_page():
     return send_from_directory(FRONTEND_DIR, 'login.html')
 
 
+@app.route('/signup')
+def signup_page():
+    if 'user_id' in session:
+        return send_from_directory(FRONTEND_DIR, 'index.html')
+    return send_from_directory(FRONTEND_DIR, 'signup.html')
+
+
 @app.route('/api/auth/status')
 def auth_status():
     if 'user_id' in session:
@@ -706,6 +1061,49 @@ def api_admin_users():
     except Exception as exc:
         print(f'Admin users error: {exc}')
         return jsonify([]), 200
+
+
+@app.route('/api/admin/users', methods=['POST'])
+@admin_required
+def api_admin_create_user():
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip().lower()
+    name = (data.get('name') or '').strip()
+    password = data.get('password') or ''
+    password_confirm = data.get('password_confirm') or ''
+    verification_code = (data.get('verification_code') or '').strip().upper()
+
+    if not email or not name or not password or not password_confirm or not verification_code:
+        return jsonify({'message': 'Nama, email, password, dan kode peserta wajib diisi'}), 400
+    if '@' not in email or '.' not in email.rsplit('@', 1)[-1]:
+        return jsonify({'message': 'Email tidak valid'}), 400
+    if len(password) < 6:
+        return jsonify({'message': 'Password minimal 6 karakter'}), 400
+    if password != password_confirm:
+        return jsonify({'message': 'Konfirmasi password tidak cocok'}), 400
+    if get_user_by_email(email):
+        return jsonify({'message': 'Email sudah terdaftar'}), 409
+
+    user_id = create_user(
+        email,
+        name,
+        password_hash=hash_password(password),
+        verification_code=verification_code,
+        is_verified=1,
+    )
+    if not user_id:
+        return jsonify({'message': 'Gagal membuat akun peserta'}), 500
+
+    return jsonify({
+        'message': 'Akun peserta berhasil dibuat',
+        'user': {
+            'id': user_id,
+            'email': email,
+            'name': name,
+            'role': 'user',
+            'verification_code': verification_code,
+        },
+    }), 201
 
 
 @app.route('/api/admin/users/<int:user_id>/verify', methods=['PUT'])
@@ -760,6 +1158,9 @@ def login():
     email = (data.get('email', '') or '').strip().lower()
     password = data.get('password', '')
     verification_code = (data.get('verification_code', '') or '').strip()
+    role_selection_provided = 'account_role' in data
+    requested_role = (data.get('account_role') or '').strip().lower()
+    admin_code = (data.get('admin_code', '') or '').strip()
     remember_me = data.get('rememberMe', False)
 
     if not email or not password:
@@ -774,6 +1175,17 @@ def login():
         return jsonify({'message': 'Email atau password salah'}), 401
 
     role = str(user.get('role', 'user')).lower()
+    if not requested_role:
+        requested_role = role
+    if requested_role not in {'admin', 'user'}:
+        return jsonify({'message': 'Tipe akun tidak valid'}), 400
+    if requested_role != role:
+        return jsonify({'message': 'Pilihan akun tidak sesuai dengan akun ini.'}), 403
+
+    if requested_role == 'admin' and role_selection_provided:
+        if not admin_code or admin_code != ADMIN_CODE:
+            return jsonify({'message': 'Kode admin tidak valid.'}), 403
+
     if role != 'admin':
         expected_code = str(user.get('verification_code') or '').strip().upper()
         if not expected_code:
@@ -887,6 +1299,8 @@ def register():
     name = (data.get('name', '') or '').strip()
     password = data.get('password', '')
     password_confirm = data.get('password_confirm', '')
+    requested_role = (data.get('account_role', 'user') or 'user').strip().lower()
+    admin_code = (data.get('admin_code', '') or '').strip()
 
     if not email or not name or not password:
         return jsonify({'message': 'Semua field harus diisi'}), 400
@@ -897,25 +1311,39 @@ def register():
     if len(password) < 6:
         return jsonify({'message': 'Password minimal 6 karakter'}), 400
 
+    if requested_role not in {'admin', 'user'}:
+        return jsonify({'message': 'Tipe akun tidak valid'}), 400
+    if requested_role == 'admin' and admin_code != ADMIN_CODE:
+        return jsonify({'message': 'Kode admin tidak valid.'}), 403
+
     # Check if user exists
     user = get_user_by_email(email)
     if user:
         return jsonify({'message': 'Email sudah terdaftar'}), 409
 
-    # Create user as unverified until admin issues a code
+    # Admin accounts are verified by the admin code; students need a code from an admin.
     password_hash = hash_password(password)
     user_id = create_user(email, name, password_hash=password_hash)
 
     if not user_id:
         return jsonify({'message': 'Gagal membuat akun'}), 500
 
+    if requested_role == 'admin':
+        conn = get_db_connection('smart_study')
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET role = %s, is_verified = 1 WHERE id = %s', ('admin', user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+
     return jsonify({
-        'message': 'Registrasi berhasil. Tunggu kode verifikasi dari admin untuk login.',
+        'message': 'Registrasi admin berhasil.' if requested_role == 'admin' else 'Registrasi berhasil. Tunggu kode verifikasi dari admin untuk login.',
         'user': {
             'id': user_id,
             'email': email,
             'name': name,
-            'role': 'user'
+            'role': requested_role
         }
     }), 201
 
@@ -1368,4 +1796,4 @@ init_db()
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)

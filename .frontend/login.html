@@ -91,6 +91,20 @@
           </div>
 
           <div class="form-group">
+            <label for="account-role">Masuk sebagai</label>
+            <select id="account-role" name="account_role">
+              <option value="user">Pelajar</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div class="form-group hidden" id="admin-code-group">
+            <label for="admin-code">Kode Admin</label>
+            <input type="password" id="admin-code" name="admin_code" placeholder="Masukkan kode admin" />
+            <span class="error-message" id="admin-code-error"></span>
+          </div>
+
+          <div class="form-group" id="verification-code-group">
             <label for="verification-code">Kode Verifikasi dari Admin</label>
             <input type="text" id="verification-code" name="verification_code" placeholder="Masukkan kode verifikasi" />
             <span class="error-message" id="verification-code-error"></span>
@@ -115,7 +129,7 @@
         </div>
 
         <div class="signup-link">
-          Belum punya akun? <a href="#signup">Daftar sekarang</a>
+          Belum punya akun? <a href="/signup">Daftar sekarang</a>
         </div>
       </div>
     </div>

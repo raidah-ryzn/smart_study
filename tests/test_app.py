@@ -366,3 +366,45 @@ class DashboardAppTests(unittest.TestCase):
         forbidden = self.client.get('/api/admin/users')
         self.assertEqual(forbidden.status_code, 403)
 
+    def test_admin_can_create_participant_that_logs_in_with_code(self):
+        admin_email = f"creator_admin_{uuid.uuid4().hex}@example.com"
+        participant_email = f"participant_{uuid.uuid4().hex}@example.com"
+
+        register_admin = self.client.post('/api/register', json={
+            'email': admin_email,
+            'name': 'Creator Admin',
+            'password': 'adminpass123',
+            'password_confirm': 'adminpass123',
+            'account_role': 'admin',
+            'admin_code': 'SMART-STUDY-ADMIN'
+        }, content_type='application/json')
+        self.assertEqual(register_admin.status_code, 201)
+
+        admin_login = self.client.post('/api/login', json={
+            'email': admin_email,
+            'password': 'adminpass123',
+            'account_role': 'admin',
+            'admin_code': 'SMART-STUDY-ADMIN'
+        }, content_type='application/json')
+        self.assertEqual(admin_login.status_code, 200)
+
+        create_participant = self.client.post('/api/admin/users', json={
+            'name': 'Peserta Baru',
+            'email': participant_email,
+            'password': 'participantpass',
+            'password_confirm': 'participantpass',
+            'verification_code': 'PESERTA-001'
+        }, content_type='application/json')
+        self.assertEqual(create_participant.status_code, 201)
+        self.assertEqual(create_participant.get_json()['user']['verification_code'], 'PESERTA-001')
+
+        self.client.post('/api/logout', content_type='application/json')
+        participant_login = self.client.post('/api/login', json={
+            'email': participant_email,
+            'password': 'participantpass',
+            'account_role': 'user',
+            'verification_code': 'peserta-001'
+        }, content_type='application/json')
+        self.assertEqual(participant_login.status_code, 200)
+        self.assertEqual(participant_login.get_json()['user']['role'], 'user')
+

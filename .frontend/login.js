@@ -31,6 +31,8 @@ function showAlert(message, type = 'error') {
 function clearErrors() {
   document.getElementById('email-error').textContent = '';
   document.getElementById('password-error').textContent = '';
+  const adminCodeError = document.getElementById('admin-code-error');
+  if (adminCodeError) adminCodeError.textContent = '';
   const vcError = document.getElementById('verification-code-error');
   if (vcError) vcError.textContent = '';
   document.getElementById('alert-message').style.display = 'none';
@@ -49,6 +51,23 @@ function validatePassword(password) {
 
 // Handle form submission
 const loginForm = document.getElementById('login-form');
+const accountRole = document.getElementById('account-role');
+const adminCodeGroup = document.getElementById('admin-code-group');
+const adminCodeInput = document.getElementById('admin-code');
+const verificationCodeGroup = document.getElementById('verification-code-group');
+
+function updateRoleFields() {
+  const isAdmin = accountRole && accountRole.value === 'admin';
+  if (adminCodeGroup) adminCodeGroup.classList.toggle('hidden', !isAdmin);
+  if (adminCodeInput) adminCodeInput.required = Boolean(isAdmin);
+  if (verificationCodeGroup) verificationCodeGroup.classList.toggle('hidden', Boolean(isAdmin));
+}
+
+if (accountRole) {
+  accountRole.addEventListener('change', updateRoleFields);
+  updateRoleFields();
+}
+
 if (loginForm) {
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -57,6 +76,8 @@ if (loginForm) {
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const verificationCode = document.getElementById('verification-code') ? document.getElementById('verification-code').value.trim() : '';
+    const selectedRole = accountRole ? accountRole.value : 'user';
+    const adminCode = adminCodeInput ? adminCodeInput.value.trim() : '';
     const rememberMe = document.getElementById('remember').checked;
 
     // Validate
@@ -72,12 +93,10 @@ if (loginForm) {
       hasError = true;
     }
 
-    if (verificationCode === '') {
-      const vcError = document.getElementById('verification-code-error');
-      if (vcError) {
-        vcError.textContent = 'Kode verifikasi wajib diisi untuk login';
-        hasError = true;
-      }
+    if (selectedRole === 'admin' && adminCode === '') {
+      const adminCodeError = document.getElementById('admin-code-error');
+      if (adminCodeError) adminCodeError.textContent = 'Kode admin wajib diisi';
+      hasError = true;
     }
 
     if (hasError) {
@@ -96,7 +115,7 @@ if (loginForm) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, verification_code: verificationCode, rememberMe }),
+        body: JSON.stringify({ email, password, account_role: selectedRole, admin_code: adminCode, verification_code: verificationCode, rememberMe }),
       });
 
       const data = await response.json();
@@ -200,50 +219,6 @@ async function handleGoogleSignInResponse(response) {
       googleSignInBtn.disabled = false;
       googleSignInBtn.textContent = originalText;
     }
-  }
-}
-
-// Handle Google Sign In Response
-async function handleGoogleSignInResponse(response) {
-  const credential = response.credential;
-
-  if (!credential) {
-    showAlert('Gagal mendapatkan credential dari Google', 'error');
-    return;
-  }
-
-  // Show loading state
-  const googleSignInBtn = document.getElementById('google-signin-btn');
-  const originalText = googleSignInBtn.textContent;
-  googleSignInBtn.disabled = true;
-  googleSignInBtn.textContent = 'Loading...';
-
-  try {
-    const response = await fetch('/api/login/google', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ credential }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok) {
-      showAlert('Login dengan Google berhasil! Mengalihkan...', 'success');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 1500);
-    } else {
-      showAlert(data.message || 'Login dengan Google gagal', 'error');
-      googleSignInBtn.disabled = false;
-      googleSignInBtn.textContent = originalText;
-    }
-  } catch (error) {
-    console.error('Google login error:', error);
-    showAlert('Terjadi kesalahan saat login dengan Google', 'error');
-    googleSignInBtn.disabled = false;
-    googleSignInBtn.textContent = originalText;
   }
 }
 
